@@ -2,6 +2,7 @@
 import random
 import simpy
 import argparse
+import pickle
 from collections import namedtuple
 
 RANDOM_SEED = 21
@@ -37,8 +38,8 @@ MAX_SIM_TIME = 500
 SIM_TIME_FLAG = False
 
 # Variables for call data
-CallInfo = namedtuple('CallInfo', ['init_interval', 'duration', 'speed',
-                                   'status'])
+CallInfo = namedtuple('CallInfo', ['base_station', 'init_interval',
+                                   'duration', 'speed', 'status'])
 call_data = []
 
 # Parse Arguments
@@ -56,7 +57,7 @@ if args.time:
     SIM_TIME_FLAG = True
 
 
-def call(env, base_stations, id, bs):
+def call(env, base_stations, id, bs, init_interval):
     """
     This represents a call. Following is the logical flow of this process.
     1. Decide on its own duration
@@ -73,11 +74,14 @@ def call(env, base_stations, id, bs):
     global blocked_calls
     global successful_calls
     global dropped_calls
+    global call_data
+
     first_iter = True
     duration = random.expovariate(1 / CALL_DURAION_MEAN)
     car_speed = random.triangular(CAR_LOW, CAR_HIGH) / 3600.0
     cover_time = CELL_LEN / car_speed
     handover = True if cover_time < duration else False
+    call_status = 'Undefined'
     while (first_iter or handover):
         with base_stations[bs].request() as try_call:
             result = yield try_call | env.timeout(0.0)
@@ -90,12 +94,14 @@ def call(env, base_stations, id, bs):
                 print "{:.4f} Call ID {} has been BLOCKED from BS {}".\
                       format(env.now, id, bs)
                 blocked_calls += 1
-                env.exit()
+                call_status = 'Blocked'
+                break
             elif try_call not in result and not first_iter:
                 print "{:.4f} Call ID {} has been DROPPED from BS {}".\
                       format(env.now, id, bs)
                 dropped_calls += 1
-                env.exit()
+                call_status = 'Dropped'
+                break
 
             # re-evaluate handover
             handover = True if cover_time < duration else False
@@ -108,7 +114,9 @@ def call(env, base_stations, id, bs):
                 yield env.timeout(duration)
                 print "{:.4f} Call ID {} ENDED.".format(env.now, id)
                 successful_calls += 1
-                env.exit()
+                call_status = 'Successful'
+                break
+                #env.exit()
 
             # if handover is true
             if handover:
@@ -122,6 +130,10 @@ def call(env, base_stations, id, bs):
                       format(env.now, id, bs)
                 first_iter = False
 
+    # Store call data
+    call_data.append(CallInfo(bs, init_interval, duration, car_speed,
+                              call_status))
+
 
 def callGenerator(env, base_stations, own_bs, finishUp):
     global total_calls
@@ -130,20 +142,19 @@ def callGenerator(env, base_stations, own_bs, finishUp):
         next_call = random.expovariate(1 / base_stations_mean[own_bs])
         print "{:.4f} Next call from BS {} in {:.4f}".\
               format(env.now, own_bs, next_call)
-        #### TODO Still one call more than expected
-        total_calls += 1
-        if not SIM_TIME_FLAG and total_calls > MAX_CALLS:
-            print "{:.4f} BS {} noticed calls maxed out".format(env.now,
-                                                                own_bs)
-            finishUp.succeed()
-            break
         result = yield env.timeout(next_call) | finishUp
         if finishUp in result:
             break
         id = str(own_bs) + '-' + str(i)
         print "{:.4f} Call ID {} INITIATED from BS {}".format(env.now, id,
                                                               own_bs)
-        env.process(call(env, base_stations, id, own_bs))
+        total_calls += 1
+        env.process(call(env, base_stations, id, own_bs, next_call))
+        if not SIM_TIME_FLAG and total_calls > MAX_CALLS:
+            print "{:.4f} BS {} noticed calls maxed out".format(env.now,
+                                                                own_bs)
+            finishUp.succeed()
+            break
         i += 1
 
 
@@ -154,7 +165,6 @@ def spawner(env, base_stations, finishUp):
 
 def timeWatch(event, env, duration):
     yield env.timeout(duration)
-    print "Time over"
     event.succeed()
 
 
@@ -166,10 +176,14 @@ for i in range(NUM_CELLS):
     base_stations[i] = simpy.Resource(env, capacity=10)
 spawner(env, base_stations, finishUp)
 if SIM_TIME_FLAG:
-    env.run(env.process(timeWatch(finishUp, env, MAX_SIM_TIME)))
-else:
-    env.run()
+    env.process(timeWatch(finishUp, env, MAX_SIM_TIME))
+env.run()
 print "Total calls = {}".format(total_calls)
 print "Blocked calls = {}".format(blocked_calls)
 print "Dropped calls = {}".format(dropped_calls)
 print "Successful calls = {}".format(successful_calls)
+
+# Store the call data in a pickle
+picklefile = 'call-data-pickle'
+with open(picklefile, 'wb') as pfile:
+    pickle.dump(call_data, pfile)
