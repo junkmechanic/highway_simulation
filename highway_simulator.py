@@ -1,16 +1,17 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 import random
 import simpy
 import argparse
 import pickle
 from collections import namedtuple
 
-RANDOM_SEED = 21
+RANDOM_SEED = 81
 
 # Statistics
 blocked_calls = 0
 successful_calls = 0
 dropped_calls = 0
+handed_over = 0
 total_calls = 0
 
 # Car speed stats
@@ -38,7 +39,7 @@ MAX_SIM_TIME = 500
 SIM_TIME_FLAG = False
 
 # Variables for call data
-CallInfo = namedtuple('CallInfo', ['base_station', 'init_interval',
+CallInfo = namedtuple('CallInfo', ['id', 'base_station', 'init_interval',
                                    'duration', 'speed', 'status'])
 call_data = []
 
@@ -49,12 +50,16 @@ parser.add_argument('-c', '--calls', action='store', type=int,
 parser.add_argument('-t', '--time', action='store', type=float,
                     help='The total duration of the simulation ' +
                     '[ * Takes precedence over --calls option]')
+parser.add_argument('-s', '--seed', action='store', type=int,
+                    help='Random seed for the simulation')
 args = parser.parse_args()
 if args.calls:
     MAX_CALLS = args.calls
 if args.time:
     MAX_SIM_TIME = args.time
     SIM_TIME_FLAG = True
+if args.seed:
+    RANDOM_SEED = args.seed
 
 
 def call(env, base_stations, id, bs, init_interval):
@@ -74,6 +79,7 @@ def call(env, base_stations, id, bs, init_interval):
     global blocked_calls
     global successful_calls
     global dropped_calls
+    global handed_over
     global call_data
 
     first_iter = True
@@ -115,6 +121,9 @@ def call(env, base_stations, id, bs, init_interval):
                 print "{:.4f} Call ID {} ENDED.".format(env.now, id)
                 successful_calls += 1
                 call_status = 'Successful'
+                if first_iter is False:
+                    handed_over += 1
+                    call_status += '+HandedOver'
                 break
                 #env.exit()
 
@@ -131,7 +140,7 @@ def call(env, base_stations, id, bs, init_interval):
                 first_iter = False
 
     # Store call data
-    call_data.append(CallInfo(bs, init_interval, duration, car_speed,
+    call_data.append(CallInfo(id, bs, init_interval, duration, car_speed,
                               call_status))
 
 
@@ -177,13 +186,17 @@ for i in range(NUM_CELLS):
 spawner(env, base_stations, finishUp)
 if SIM_TIME_FLAG:
     env.process(timeWatch(finishUp, env, MAX_SIM_TIME))
+    # If you pass a process to run() of class Environment, the simulation will
+    # exit once that process is over, regardless of all the other processes
+    # defined for the environment
 env.run()
 print "Total calls = {}".format(total_calls)
 print "Blocked calls = {}".format(blocked_calls)
 print "Dropped calls = {}".format(dropped_calls)
+print "Handed-Over calls = {}".format(handed_over)
 print "Successful calls = {}".format(successful_calls)
 
 # Store the call data in a pickle
-picklefile = 'call-data-pickle'
+picklefile = 'call-data-' + str(RANDOM_SEED) + '.pickle'
 with open(picklefile, 'wb') as pfile:
     pickle.dump(call_data, pfile)
