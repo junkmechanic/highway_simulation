@@ -17,7 +17,7 @@ NUM_SIM = 02
 SIM_TIME = 400
 
 CallInfo = namedtuple('CallInfo', ['id', 'base_station', 'init_interval',
-                                   'duration', 'speed', 'status'])
+                                   'position', 'duration', 'speed', 'status'])
 
 # Parse Arguments
 parser = argparse.ArgumentParser(description='Enter options for simulation.')

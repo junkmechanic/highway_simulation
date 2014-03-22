@@ -22,7 +22,7 @@ CELL_LEN = 20.0
 # Call duration stats
 CALL_DURAION_MEAN = 119.0
 
-NUM_CELLS = 03
+NUM_CELLS = 20
 
 # Expovariate means for each base station
 base_stations_mean = {}
@@ -40,7 +40,7 @@ SIM_TIME_FLAG = False
 
 # Variables for call data
 CallInfo = namedtuple('CallInfo', ['id', 'base_station', 'init_interval',
-                                   'duration', 'speed', 'status'])
+                                   'position', 'duration', 'speed', 'status'])
 call_data = []
 
 # Parse Arguments
@@ -83,11 +83,19 @@ def call(env, base_stations, id, bs, init_interval):
     global call_data
 
     first_iter = True
-    duration = random.expovariate(1 / CALL_DURAION_MEAN)
+
+    total_duration = random.expovariate(1 / CALL_DURAION_MEAN)
     car_speed = random.triangular(CAR_LOW, CAR_HIGH) / 3600.0
-    cover_time = CELL_LEN / car_speed
+    original_position = random.uniform(0.0, CELL_LEN)
+
+    # In case of handover, the duration value needs to be reduced, hence
+    # capture it in another variable. Same goes for the position.
+    duration = total_duration
+    position = original_position
+    cover_time = (CELL_LEN - position) / car_speed
     handover = True if cover_time < duration else False
     call_status = 'Undefined'
+
     while (first_iter or handover):
         with base_stations[bs].request() as try_call:
             result = yield try_call | env.timeout(0.0)
@@ -110,13 +118,14 @@ def call(env, base_stations, id, bs, init_interval):
                 break
 
             # re-evaluate handover
+            cover_time = (CELL_LEN - position) / car_speed
             handover = True if cover_time < duration else False
             # if handover is false, then use the channel for the call
             # duration and then release it
             if handover is False:
                 print "{:.4f} Call ID {} with duration {:.3f}s with speed {}"\
-                      " STARTED from BS {}".format(env.now, id, duration,
-                                                   car_speed, bs)
+                      " STARTED from BS {} at position {}".\
+                      format(env.now, id, duration, car_speed, bs, position)
                 yield env.timeout(duration)
                 print "{:.4f} Call ID {} ENDED.".format(env.now, id)
                 successful_calls += 1
@@ -129,19 +138,22 @@ def call(env, base_stations, id, bs, init_interval):
 
             # if handover is true
             if handover:
-                duration -= cover_time
                 print "{:.4f} Call ID {} with duration {:.3f}s with speed {}"\
-                      " STARTED from BS {}".format(env.now, id, duration,
-                                                   car_speed, bs)
+                      " STARTED from BS {} at position {}".\
+                      format(env.now, id, duration, car_speed, bs, position)
+                duration -= cover_time
                 yield env.timeout(cover_time)
                 bs = 0 if bs + 1 == NUM_CELLS else bs + 1
                 print "{:.4f} Call ID {} attempting a HANDOVER to BS {}".\
                       format(env.now, id, bs)
                 first_iter = False
+                # Now update position to 0.0 to indicate that it is the
+                # starting of the next cell
+                position = 0.0
 
     # Store call data
-    call_data.append(CallInfo(id, bs, init_interval, duration, car_speed,
-                              call_status))
+    call_data.append(CallInfo(id, bs, init_interval, original_position,
+                              total_duration, car_speed, call_status))
 
 
 def callGenerator(env, base_stations, own_bs, finishUp):
