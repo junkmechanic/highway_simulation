@@ -14,6 +14,8 @@ SEEDS = [
 
 NUM_SIM = 02
 
+SIM_TIME = 400
+
 CallInfo = namedtuple('CallInfo', ['id', 'base_station', 'init_interval',
                                    'duration', 'speed', 'status'])
 
@@ -21,21 +23,29 @@ CallInfo = namedtuple('CallInfo', ['id', 'base_station', 'init_interval',
 parser = argparse.ArgumentParser(description='Enter options for simulation.')
 parser.add_argument('-n', '--num', action='store', type=int,
                     help='No. of simulations to run')
+parser.add_argument('-t', '--time', action='store', type=float,
+                    help='Time of each simulation ')
 args = parser.parse_args()
 if args.num:
     NUM_SIM = args.num
+if args.time:
+    SIM_TIME = args.time
 
-pipes = []
+# Running processes simultaneously is not working for some reason. It errors
+# out with some problem or the other. So will run each simulation after the
+# other.
+#pipes = []
 
 # Run all simulations
 for i in range(NUM_SIM):
     outfile = 'simulation-' + str(SEEDS[i]) + '.log'
     cmd = './highway_simulator.py -s ' + str(SEEDS[i]) +\
-          ' -t ' + str(50) + ' >' + outfile + ' 2>simulation-errors.log'
+          ' -t ' + str(SIM_TIME) + ' >' + outfile + ' 2>simulation-errors.log'
     print "Running : " + cmd
-    pipes.append(subprocess.Popen(cmd, shell=True))
+    subprocess.check_call(cmd, shell=True)
+    #pipes.append(subprocess.Popen(cmd, shell=True))
 
-exit_codes = [p.wait() for p in pipes]
+#exit_codes = [p.wait() for p in pipes]
 
 #Convert data to csv
 csvfile = 'simulation-data.csv'

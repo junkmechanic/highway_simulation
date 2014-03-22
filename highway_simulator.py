@@ -175,6 +175,8 @@ def spawner(env, base_stations, finishUp):
 def timeWatch(event, env, duration):
     yield env.timeout(duration)
     event.succeed()
+    print "{:.4f} No more calls. Waiting for the live calls to end".\
+          format(env.now)
 
 
 random.seed(RANDOM_SEED)
