@@ -17,7 +17,7 @@ total_calls = 0
 # Car speed stats
 CAR_LOW = 70.0
 CAR_HIGH = 110.0
-CELL_LEN = 20.0
+CELL_LEN = 2.0
 
 # Call duration stats
 CALL_DURAION_MEAN = 119.0
@@ -35,31 +35,13 @@ MAX_CALLS = 4500
 # Maximum simulation running time
 MAX_SIM_TIME = 500
 
-# Bollean to control simulation termination conditions
+# Boolean to control simulation termination conditions
 SIM_TIME_FLAG = False
 
 # Variables for call data
 CallInfo = namedtuple('CallInfo', ['id', 'base_station', 'init_interval',
                                    'position', 'duration', 'speed', 'status'])
 call_data = []
-
-# Parse Arguments
-parser = argparse.ArgumentParser(description='Enter options for simulation.')
-parser.add_argument('-c', '--calls', action='store', type=int,
-                    help='No. of calls during the simulation')
-parser.add_argument('-t', '--time', action='store', type=float,
-                    help='The total duration of the simulation ' +
-                    '[ * Takes precedence over --calls option]')
-parser.add_argument('-s', '--seed', action='store', type=int,
-                    help='Random seed for the simulation')
-args = parser.parse_args()
-if args.calls:
-    MAX_CALLS = args.calls
-if args.time:
-    MAX_SIM_TIME = args.time
-    SIM_TIME_FLAG = True
-if args.seed:
-    RANDOM_SEED = args.seed
 
 
 def call(env, base_stations, id, bs, init_interval):
@@ -123,9 +105,8 @@ def call(env, base_stations, id, bs, init_interval):
             # if handover is false, then use the channel for the call
             # duration and then release it
             if handover is False:
-                print "{:.4f} Call ID {} with duration {:.3f}s with speed {}"\
-                      " STARTED from BS {} at position {}".\
-                      format(env.now, id, duration, car_speed, bs, position)
+                printInitiation(env, id, duration, car_speed, bs,
+                                position, first_iter)
                 yield env.timeout(duration)
                 print "{:.4f} Call ID {} ENDED.".format(env.now, id)
                 successful_calls += 1
@@ -138,9 +119,8 @@ def call(env, base_stations, id, bs, init_interval):
 
             # if handover is true
             if handover:
-                print "{:.4f} Call ID {} with duration {:.3f}s with speed {}"\
-                      " STARTED from BS {} at position {}".\
-                      format(env.now, id, duration, car_speed, bs, position)
+                printInitiation(env, id, duration, car_speed, bs,
+                                position, first_iter)
                 duration -= cover_time
                 yield env.timeout(cover_time)
                 bs = 0 if bs + 1 == NUM_CELLS else bs + 1
@@ -154,6 +134,17 @@ def call(env, base_stations, id, bs, init_interval):
     # Store call data
     call_data.append(CallInfo(id, bs, init_interval, original_position,
                               total_duration, car_speed, call_status))
+
+
+def printInitiation(env, id, duration, car_speed, bs, position, first_iter):
+    if first_iter:
+        print "{:.4f} Call ID {} with duration {:.3f}s with speed {}"\
+              " STARTED from BS {} at position {}".\
+              format(env.now, id, duration, car_speed, bs, position)
+    else:
+        print "{:.4f} Call ID {} with duration {:.3f}s with speed {}"\
+              " HANDED-OVER to BS {}".\
+              format(env.now, id, duration, car_speed, bs)
 
 
 def callGenerator(env, base_stations, own_bs, finishUp):
@@ -191,26 +182,56 @@ def timeWatch(event, env, duration):
           format(env.now)
 
 
-random.seed(RANDOM_SEED)
-env = simpy.Environment()
-finishUp = env.event()
-base_stations = {}
-for i in range(NUM_CELLS):
-    base_stations[i] = simpy.Resource(env, capacity=10)
-spawner(env, base_stations, finishUp)
-if SIM_TIME_FLAG:
-    env.process(timeWatch(finishUp, env, MAX_SIM_TIME))
-    # If you pass a process to run() of class Environment, the simulation will
-    # exit once that process is over, regardless of all the other processes
-    # defined for the environment
-env.run()
-print "Total calls = {}".format(total_calls)
-print "Blocked calls = {}".format(blocked_calls)
-print "Dropped calls = {}".format(dropped_calls)
-print "Handed-Over calls = {}".format(handed_over)
-print "Successful calls = {}".format(successful_calls)
+def simulate(SEED, SIM_TIME, TIME_FLAG=True):
+    global RANDOM_SEED, SIM_TIME_FLAG, MAX_SIM_TIME
+    RANDOM_SEED = SEED
+    SIM_TIME_FLAG = TIME_FLAG
+    MAX_SIM_TIME = SIM_TIME
+    random.seed(RANDOM_SEED)
+    env = simpy.Environment()
+    finishUp = env.event()
+    base_stations = {}
+    for i in range(NUM_CELLS):
+        base_stations[i] = simpy.Resource(env, capacity=10)
+    spawner(env, base_stations, finishUp)
+    if SIM_TIME_FLAG:
+        env.process(timeWatch(finishUp, env, MAX_SIM_TIME))
+        # If you pass a process to run() of class Environment, the simulation
+        # will exit once that process is over, regardless of all the other
+        # processes defined for the environment
+    env.run()
+    print "Total calls = {}".format(total_calls)
+    print "Blocked calls = {}".format(blocked_calls)
+    print "Dropped calls = {}".format(dropped_calls)
+    print "Handed-Over calls = {}".format(handed_over)
+    print "Successful calls = {}".format(successful_calls)
 
-# Store the call data in a pickle
-picklefile = 'call-data-' + str(RANDOM_SEED) + '.pickle'
-with open(picklefile, 'wb') as pfile:
-    pickle.dump(call_data, pfile)
+    # Store the call data in a pickle
+    picklefile = 'call-data-' + str(RANDOM_SEED) + '.pickle'
+    with open(picklefile, 'wb') as pfile:
+        pickle.dump(call_data, pfile)
+
+    return({'total': total_calls, 'blocked': blocked_calls,
+            'dropped': dropped_calls, 'handed': handed_over,
+            'success': successful_calls})
+
+if __name__ == '__main__':
+    # Parse Arguments
+    parser = argparse.ArgumentParser(description='Options for simulation.')
+    parser.add_argument('-c', '--calls', action='store', type=int,
+                        help='No. of calls during the simulation')
+    parser.add_argument('-t', '--time', action='store', type=float,
+                        help='The total duration of the simulation ' +
+                        '[ * Takes precedence over --calls option]')
+    parser.add_argument('-s', '--seed', action='store', type=int,
+                        help='Random seed for the simulation')
+    args = parser.parse_args()
+    if args.calls:
+        MAX_CALLS = args.calls
+    if args.time:
+        MAX_SIM_TIME = args.time
+        SIM_TIME_FLAG = True
+    if args.seed:
+        RANDOM_SEED = args.seed
+
+    simulate(RANDOM_SEED, MAX_SIM_TIME, SIM_TIME_FLAG)

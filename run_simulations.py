@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-import subprocess
+#import subprocess
 import argparse
 from collections import namedtuple
 import pickle
+from highway_simulator import simulate
 
 SEEDS = [
     7925, 601, 3755, 6553, 9928, 1588, 8988, 8286, 6500, 1007, 9415, 4671,
@@ -36,16 +37,27 @@ if args.time:
 # other.
 #pipes = []
 
+blocked = []
+dropped = []
+
 # Run all simulations
 for i in range(NUM_SIM):
-    outfile = 'simulation-' + str(SEEDS[i]) + '.log'
-    cmd = './highway_simulator.py -s ' + str(SEEDS[i]) +\
-          ' -t ' + str(SIM_TIME) + ' >' + outfile + ' 2>simulation-errors.log'
-    print "Running : " + cmd
-    subprocess.check_call(cmd, shell=True)
+    #outfile = 'simulation-' + str(SEEDS[i]) + '.log'
+    #cmd = './highway_simulator.py -s ' + str(SEEDS[i]) +\
+    #      ' -t ' + str(SIM_TIME) + ' >' + outfile + ' 2>simulation-errors.log'
+    #print "Running : " + cmd
+    #subprocess.check_call(cmd, shell=True)
     #pipes.append(subprocess.Popen(cmd, shell=True))
+    stats = simulate(SEEDS[i], SIM_TIME)
+    blocked.append(stats['blocked'] / float(stats['total']) * 100.0)
+    dropped.append(stats['dropped'] / float(stats['total']) * 100.0)
 
 #exit_codes = [p.wait() for p in pipes]
+
+print blocked
+print str(sum(blocked) / float(len(blocked)))
+print dropped
+print str(sum(dropped) / float(len(dropped)))
 
 #Convert data to csv
 csvfile = 'simulation-data.csv'
