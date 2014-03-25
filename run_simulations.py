@@ -17,6 +17,8 @@ NUM_SIM = 02
 
 SIM_TIME = 400
 
+verbosity = 0
+
 CallInfo = namedtuple('CallInfo', ['id', 'base_station', 'init_interval',
                                    'position', 'duration', 'speed', 'status'])
 
@@ -26,11 +28,15 @@ parser.add_argument('-n', '--num', action='store', type=int,
                     help='No. of simulations to run')
 parser.add_argument('-t', '--time', action='store', type=float,
                     help='Time of each simulation ')
+parser.add_argument('-v', '--verbose', action='count',
+                    help='Verbosity level on the commandline ouput')
 args = parser.parse_args()
 if args.num:
     NUM_SIM = args.num
 if args.time:
     SIM_TIME = args.time
+if args.verbose:
+    verbosity = args.verbose
 
 # Running processes simultaneously is not working for some reason. It errors
 # out with some problem or the other. So will run each simulation after the
@@ -48,14 +54,16 @@ for i in range(NUM_SIM):
     #print "Running : " + cmd
     #subprocess.check_call(cmd, shell=True)
     #pipes.append(subprocess.Popen(cmd, shell=True))
-    stats = simulate(SEEDS[i], SIM_TIME)
+    stats = simulate(SEEDS[i], SIM_TIME, True, verbosity)
     blocked.append(stats['blocked'] / float(stats['total']) * 100.0)
     dropped.append(stats['dropped'] / float(stats['total']) * 100.0)
 
 #exit_codes = [p.wait() for p in pipes]
 
+print "Blocked %"
 print blocked
 print str(sum(blocked) / float(len(blocked)))
+print "Dropped %"
 print dropped
 print str(sum(dropped) / float(len(dropped)))
 

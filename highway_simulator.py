@@ -25,9 +25,13 @@ CALL_DURAION_MEAN = 119.0
 NUM_CELLS = 20
 
 # Expovariate means for each base station
-base_stations_mean = {}
-for n in range(NUM_CELLS):
-    base_stations_mean[n] = 28.0
+base_stations_mean = {
+    0: 27.7, 1: 28.3, 2: 28.3, 3: 27.6, 4: 27.4, 5: 27.5, 6: 27.6, 7: 25.6,
+    8: 25.1, 9: 25.2, 10: 27.5, 11: 25.4, 12: 26.5, 13: 25.1, 14: 27.4,
+    15: 27.5, 16: 27.3, 17: 26.4, 18: 28.0, 19: 27.9
+}
+#for n in range(NUM_CELLS):
+#    base_stations_mean[n] = 28.0
 
 # Maximum number of calls in the simulation
 MAX_CALLS = 4500
@@ -42,6 +46,8 @@ SIM_TIME_FLAG = False
 CallInfo = namedtuple('CallInfo', ['id', 'base_station', 'init_interval',
                                    'position', 'duration', 'speed', 'status'])
 call_data = []
+
+verbosity = 0
 
 
 def call(env, base_stations, id, bs, init_interval):
@@ -87,14 +93,14 @@ def call(env, base_stations, id, bs, init_interval):
             # that the Resource (channel) was not free and the call has been
             # blocked
             if try_call not in result and first_iter:
-                print "{:.4f} Call ID {} has been BLOCKED from BS {}".\
-                      format(env.now, id, bs)
+                printf("{:.4f} Call ID {} has been BLOCKED from BS {}".
+                       format(env.now, id, bs), 1)
                 blocked_calls += 1
                 call_status = 'Blocked'
                 break
             elif try_call not in result and not first_iter:
-                print "{:.4f} Call ID {} has been DROPPED from BS {}".\
-                      format(env.now, id, bs)
+                printf("{:.4f} Call ID {} has been DROPPED from BS {}".
+                       format(env.now, id, bs), 1)
                 dropped_calls += 1
                 call_status = 'Dropped'
                 break
@@ -108,7 +114,7 @@ def call(env, base_stations, id, bs, init_interval):
                 printInitiation(env, id, duration, car_speed, bs,
                                 position, first_iter)
                 yield env.timeout(duration)
-                print "{:.4f} Call ID {} ENDED.".format(env.now, id)
+                printf("{:.4f} Call ID {} ENDED.".format(env.now, id), 2)
                 successful_calls += 1
                 call_status = 'Successful'
                 if first_iter is False:
@@ -124,8 +130,8 @@ def call(env, base_stations, id, bs, init_interval):
                 duration -= cover_time
                 yield env.timeout(cover_time)
                 bs = 0 if bs + 1 == NUM_CELLS else bs + 1
-                print "{:.4f} Call ID {} attempting a HANDOVER to BS {}".\
-                      format(env.now, id, bs)
+                printf("{:.4f} Call ID {} attempting a HANDOVER to BS {}".
+                       format(env.now, id, bs), 1)
                 first_iter = False
                 # Now update position to 0.0 to indicate that it is the
                 # starting of the next cell
@@ -138,13 +144,13 @@ def call(env, base_stations, id, bs, init_interval):
 
 def printInitiation(env, id, duration, car_speed, bs, position, first_iter):
     if first_iter:
-        print "{:.4f} Call ID {} with duration {:.3f}s with speed {}"\
-              " STARTED from BS {} at position {}".\
-              format(env.now, id, duration, car_speed, bs, position)
+        printf("{:.4f} Call ID {} with duration {:.3f}s with speed {}"
+               " STARTED from BS {} at position {}".
+               format(env.now, id, duration, car_speed, bs, position), 1)
     else:
-        print "{:.4f} Call ID {} with duration {:.3f}s with speed {}"\
-              " HANDED-OVER to BS {}".\
-              format(env.now, id, duration, car_speed, bs)
+        printf("{:.4f} Call ID {} with duration {:.3f}s with speed {}"
+               " HANDED-OVER to BS {}".
+               format(env.now, id, duration, car_speed, bs), 1)
 
 
 def callGenerator(env, base_stations, own_bs, finishUp):
@@ -152,19 +158,19 @@ def callGenerator(env, base_stations, own_bs, finishUp):
     i = 1
     while True:
         next_call = random.expovariate(1 / base_stations_mean[own_bs])
-        print "{:.4f} Next call from BS {} in {:.4f}".\
-              format(env.now, own_bs, next_call)
+        printf("{:.4f} Next call from BS {} in {:.4f}".
+               format(env.now, own_bs, next_call), 3)
         result = yield env.timeout(next_call) | finishUp
         if finishUp in result:
             break
         id = str(own_bs) + '-' + str(i)
-        print "{:.4f} Call ID {} INITIATED from BS {}".format(env.now, id,
-                                                              own_bs)
+        printf("{:.4f} Call ID {} INITIATED from BS {}".format(env.now, id,
+                                                               own_bs), 2)
         total_calls += 1
         env.process(call(env, base_stations, id, own_bs, next_call))
         if not SIM_TIME_FLAG and total_calls > MAX_CALLS:
-            print "{:.4f} BS {} noticed calls maxed out".format(env.now,
-                                                                own_bs)
+            printf("{:.4f} BS {} noticed calls maxed out".format(env.now,
+                                                                 own_bs), 3)
             finishUp.succeed()
             break
         i += 1
@@ -178,15 +184,13 @@ def spawner(env, base_stations, finishUp):
 def timeWatch(event, env, duration):
     yield env.timeout(duration)
     event.succeed()
-    print "{:.4f} No more calls. Waiting for the live calls to end".\
-          format(env.now)
+    printf("{:.4f} No more calls. Waiting for the live calls to end".
+           format(env.now), 3)
 
 
-def simulate(SEED, SIM_TIME, TIME_FLAG=True):
+def simulate(SEED, SIM_TIME, TIME_FLAG=True, verbose=0):
     global RANDOM_SEED, SIM_TIME_FLAG, MAX_SIM_TIME
-    RANDOM_SEED = SEED
-    SIM_TIME_FLAG = TIME_FLAG
-    MAX_SIM_TIME = SIM_TIME
+    initialize(SEED, SIM_TIME, TIME_FLAG, verbose)
     random.seed(RANDOM_SEED)
     env = simpy.Environment()
     finishUp = env.event()
@@ -200,11 +204,11 @@ def simulate(SEED, SIM_TIME, TIME_FLAG=True):
         # will exit once that process is over, regardless of all the other
         # processes defined for the environment
     env.run()
-    print "Total calls = {}".format(total_calls)
-    print "Blocked calls = {}".format(blocked_calls)
-    print "Dropped calls = {}".format(dropped_calls)
-    print "Handed-Over calls = {}".format(handed_over)
-    print "Successful calls = {}".format(successful_calls)
+    printf("Total calls = {}".format(total_calls))
+    printf("Blocked calls = {}".format(blocked_calls))
+    printf("Dropped calls = {}".format(dropped_calls))
+    printf("Handed-Over calls = {}".format(handed_over))
+    printf("Successful calls = {}".format(successful_calls))
 
     # Store the call data in a pickle
     picklefile = 'call-data-' + str(RANDOM_SEED) + '.pickle'
@@ -214,6 +218,27 @@ def simulate(SEED, SIM_TIME, TIME_FLAG=True):
     return({'total': total_calls, 'blocked': blocked_calls,
             'dropped': dropped_calls, 'handed': handed_over,
             'success': successful_calls})
+
+
+def initialize(SEED, SIM_TIME, TIME_FLAG, verbose):
+    global RANDOM_SEED, SIM_TIME_FLAG, MAX_SIM_TIME
+    global blocked_calls, successful_calls, dropped_calls, handed_over,\
+        total_calls, verbosity
+    RANDOM_SEED = SEED
+    SIM_TIME_FLAG = TIME_FLAG
+    MAX_SIM_TIME = SIM_TIME
+    verbosity = verbose
+    blocked_calls, successful_calls, dropped_calls, handed_over,\
+        total_calls = 0, 0, 0, 0, 0
+
+
+def printf(toprint, verbose=0):
+    #global verbosity
+    with open('simulation.log', 'a') as logfile:
+        logfile.write(toprint + '\n')
+    if verbosity >= verbose:
+        print toprint
+
 
 if __name__ == '__main__':
     # Parse Arguments
@@ -225,6 +250,8 @@ if __name__ == '__main__':
                         '[ * Takes precedence over --calls option]')
     parser.add_argument('-s', '--seed', action='store', type=int,
                         help='Random seed for the simulation')
+    parser.add_argument('-v', '--verbose', action='count',
+                        help='Verbosity level on the commandline ouput')
     args = parser.parse_args()
     if args.calls:
         MAX_CALLS = args.calls
@@ -233,5 +260,7 @@ if __name__ == '__main__':
         SIM_TIME_FLAG = True
     if args.seed:
         RANDOM_SEED = args.seed
+    if args.verbose:
+        verbosity = args.verbose
 
-    simulate(RANDOM_SEED, MAX_SIM_TIME, SIM_TIME_FLAG)
+    simulate(RANDOM_SEED, MAX_SIM_TIME, SIM_TIME_FLAG, verbosity)
