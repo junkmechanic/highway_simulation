@@ -24,6 +24,9 @@ CALL_DURAION_MEAN = 119.0
 
 NUM_CELLS = 20
 
+# Channels reserved for handover
+HANDOVR_CHAN = 0
+
 # Expovariate means for each base station
 base_stations_mean = {
     0: 27.7, 1: 28.3, 2: 28.3, 3: 27.6, 4: 27.4, 5: 27.5, 6: 27.2, 7: 25.6,
@@ -86,7 +89,11 @@ def call(env, base_stations, id, bs, init_interval):
     bs_visited = []
 
     while (first_iter or handover):
-        with base_stations[bs].request() as try_call:
+        if first_iter or base_stations[bs][1].capacity == 0:
+            server = base_stations[bs][0]
+        else:
+            server = base_stations[bs][1]
+        with server.request() as try_call:
             result = yield try_call | env.timeout(0.0)
 
             # if result object does not contain the Request object and this
@@ -194,15 +201,19 @@ def timeWatch(event, env, duration):
            format(env.now), 3)
 
 
-def simulate(SEED, SIM_TIME, TIME_FLAG=True, verbose=0):
-    global RANDOM_SEED, SIM_TIME_FLAG, MAX_SIM_TIME
-    initialize(SEED, SIM_TIME, TIME_FLAG, verbose)
+def simulate_hcr(SEED, SIM_TIME, TIME_FLAG=True, HANDOVR=1, verbose=0):
+    global RANDOM_SEED, SIM_TIME_FLAG, MAX_SIM_TIME, HANDOVR_CHAN
+    initialize(SEED, SIM_TIME, TIME_FLAG, HANDOVR, verbose)
     random.seed(RANDOM_SEED)
     env = simpy.Environment()
     finishUp = env.event()
     base_stations = {}
+    # Each base station has two types of resources (channels), the first one
+    # for calls originating within that BS and the other for calls being
+    # handed-over from the previous BS.
     for i in range(NUM_CELLS):
-        base_stations[i] = simpy.Resource(env, capacity=10)
+        base_stations[i] = (simpy.Resource(env, capacity=(10 - HANDOVR_CHAN)),
+                            simpy.Resource(env, capacity=HANDOVR_CHAN))
     spawner(env, base_stations, finishUp)
     if SIM_TIME_FLAG:
         env.process(timeWatch(finishUp, env, MAX_SIM_TIME))
@@ -226,13 +237,14 @@ def simulate(SEED, SIM_TIME, TIME_FLAG=True, verbose=0):
             'success': successful_calls})
 
 
-def initialize(SEED, SIM_TIME, TIME_FLAG, verbose):
-    global RANDOM_SEED, SIM_TIME_FLAG, MAX_SIM_TIME
+def initialize(SEED, SIM_TIME, TIME_FLAG, HANDOVR, verbose):
+    global RANDOM_SEED, SIM_TIME_FLAG, MAX_SIM_TIME, HANDOVR_CHAN
     global blocked_calls, successful_calls, dropped_calls, handed_over,\
         total_calls, verbosity
     RANDOM_SEED = SEED
     SIM_TIME_FLAG = TIME_FLAG
     MAX_SIM_TIME = SIM_TIME
+    HANDOVR_CHAN = HANDOVR
     verbosity = verbose
     blocked_calls, successful_calls, dropped_calls, handed_over,\
         total_calls = 0, 0, 0, 0, 0
@@ -254,6 +266,8 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--time', action='store', type=float,
                         help='The total duration of the simulation ' +
                         '[ * Takes precedence over --calls option]')
+    parser.add_argument('-n', '--num', action='store', type=int,
+                        help='Number of channels reserved for handover')
     parser.add_argument('-s', '--seed', action='store', type=int,
                         help='Random seed for the simulation')
     parser.add_argument('-v', '--verbose', action='count',
@@ -264,9 +278,12 @@ if __name__ == '__main__':
     if args.time:
         MAX_SIM_TIME = args.time
         SIM_TIME_FLAG = True
+    if args.num:
+        HANDOVR_CHAN = args.num
     if args.seed:
         RANDOM_SEED = args.seed
     if args.verbose:
         verbosity = args.verbose
 
-    simulate(RANDOM_SEED, MAX_SIM_TIME, SIM_TIME_FLAG, verbosity)
+    simulate_hcr(RANDOM_SEED, MAX_SIM_TIME, SIM_TIME_FLAG, HANDOVR_CHAN,
+                 verbosity)
