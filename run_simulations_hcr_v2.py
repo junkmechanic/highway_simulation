@@ -3,7 +3,7 @@
 import argparse
 from collections import namedtuple
 import pickle
-from highway_simulator import simulate
+from highway_simulator_hcr_v2 import simulate_hcr
 
 SEEDS = [
     7925, 601, 3755, 6553, 9928, 1588, 8988, 8286, 6500, 1007, 9415, 4671,
@@ -17,6 +17,8 @@ NUM_SIM = 02
 
 SIM_TIME = 400
 
+HANDOVR = 1
+
 verbosity = 0
 
 CallInfo = namedtuple('CallInfo', ['id', 'base_stations', 'init_interval',
@@ -28,6 +30,8 @@ parser.add_argument('-r', '--runs', action='store', type=int,
                     help='No. of simulations to run')
 parser.add_argument('-t', '--time', action='store', type=float,
                     help='Time of each simulation ')
+parser.add_argument('-n', '--num', action='store', type=int,
+                    help='Number of channels reserved for handover')
 parser.add_argument('-v', '--verbose', action='count',
                     help='Verbosity level on the commandline ouput')
 args = parser.parse_args()
@@ -35,6 +39,8 @@ if args.runs:
     NUM_SIM = args.runs
 if args.time:
     SIM_TIME = args.time
+if args.num:
+    HANDOVR = args.num
 if args.verbose:
     verbosity = args.verbose
 
@@ -48,18 +54,11 @@ dropped = []
 
 # Run all simulations
 for i in range(NUM_SIM):
-    #outfile = 'simulation-' + str(SEEDS[i]) + '.log'
-    #cmd = './highway_simulator.py -s ' + str(SEEDS[i]) +\
-    #      ' -t ' + str(SIM_TIME) + ' >' + outfile + ' 2>simulation-errors.log'
-    #print "Running : " + cmd
-    #subprocess.check_call(cmd, shell=True)
-    #pipes.append(subprocess.Popen(cmd, shell=True))
-    stats = simulate(SEEDS[i], SIM_TIME, True, verbosity)
+    stats = simulate_hcr(SEEDS[i], SIM_TIME, True, HANDOVR, verbosity)
     blocked.append(stats['blocked'] / float(stats['total']) * 100.0)
     dropped.append(stats['dropped'] / float(stats['total']) * 100.0)
     #dropped.append(stats['dropped'] / float(stats['total']) * 100.0)
 
-#exit_codes = [p.wait() for p in pipes]
 
 print "Blocked %"
 print blocked

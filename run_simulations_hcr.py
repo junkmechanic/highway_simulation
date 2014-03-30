@@ -26,7 +26,7 @@ CallInfo = namedtuple('CallInfo', ['id', 'base_stations', 'init_interval',
 
 # Parse Arguments
 parser = argparse.ArgumentParser(description='Enter options for simulation.')
-parser.add_argument('-n', '--num', action='store', type=int,
+parser.add_argument('-r', '--runs', action='store', type=int,
                     help='No. of simulations to run')
 parser.add_argument('-t', '--time', action='store', type=float,
                     help='Time of each simulation ')
@@ -35,8 +35,8 @@ parser.add_argument('-n', '--num', action='store', type=int,
 parser.add_argument('-v', '--verbose', action='count',
                     help='Verbosity level on the commandline ouput')
 args = parser.parse_args()
-if args.num:
-    NUM_SIM = args.num
+if args.runs:
+    NUM_SIM = args.runs
 if args.time:
     SIM_TIME = args.time
 if args.num:
