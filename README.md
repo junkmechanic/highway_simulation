@@ -15,3 +15,8 @@ run_simulations.py runs multiple simulations. Hence, a csv file is
 automatically generated which contains call data from all the simulations
 combined. For individual simulations, one can run explore.py as mentioned
 above.
+
+hcr files are for simulating handover channel reservation scheme. The files
+without the hcr suffix are with fixed channel reservation scheme. hcr_v2 is to
+provision using the other channels as well for handover calls apart from the
+channels that are dedicated for handover.
